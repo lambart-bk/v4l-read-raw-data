@@ -1,10 +1,13 @@
-#list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 find_package(OpenCV REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS}  )
 set( CMAKE_CXX_FLAGS "-std=c++11 -O3" )
 set(CMAKE_BUILD_TYPE "Debug")
-add_executable(v4l-read-raw main.cpp)
-target_link_libraries(v4l-read-raw ${OpenCV_LIBRARIES} )
-#target_link_libraries(for_test ${OpenCV_LIBRARIES} -ljpeg)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY /home/pi/work/ASC/run/)
+
+add_executable(IRcamera main.cpp )
+target_link_libraries(IRcamera ${OpenCV_LIBRARIES} )
+#target_link_libraries(IRcamera ${OpenCV_LIBRARIES} -ljpeg -lz )
 

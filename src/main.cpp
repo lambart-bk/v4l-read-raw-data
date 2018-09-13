@@ -3,8 +3,8 @@
 #include"opencv2/imgproc/imgproc.hpp"
 #include"opencv/highgui.h"
 #include"opencv2/core/core.hpp"
-#include"opencv2/video/video.hpp"
-#include"opencv2/imgproc/imgproc.hpp"
+#include"opencv2/videoio.hpp"
+#include"opencv2/imgproc.hpp"
 
 #include"opencv/cxcore.h"
 
@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include"iomanip"
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -27,52 +28,117 @@
 #include <unistd.h>
 #include<time.h>
 //#include <jpeglib.h>
+#include <dirent.h>
 
-#include"fcntl.h"
-#include"termios.h"
-#include"iomanip"
+//#include"fcntl.h"
+//#include"termios.h"
+//static UART_HANDLE uart_hd;
 
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <termios.h>
+
+#define BAUDRATE B115200 ///Baud rate : 115200
+#define DEVICE "/dev/ttyAMA0"
+#define SIZE 8
+int nFd = 0;
 
 #define FALSE false
 #define TRUE true
+//int rec_flag=0;
 
 using namespace std;
 using namespace cv;
-
-
-void ttyconfig(int ttyid)
+const char data_dir[50]="/home//work/data/";
+void getnamefromtime(char *str)
 {
-  struct termios tios;
-  tios.c_oflag=0;
-  tios.c_iflag=0;
-  tios.c_lflag=0;
-  cfsetispeed(&tios,0010002);
-  cfsetospeed(&tios,0010002);
+  char hostname[30]={'\0'};
+  gethostname(hostname,sizeof(hostname));
   
-  //data bits
-  tios.c_cflag&=~0x30;
-  tios.c_cflag|=CS8;
-  
-  //stop bits
-  tios.c_cflag&=~CSTOPB;
-  
-  //parity
-  tios.c_cflag&=~PARENB;
-  
-  tios.c_cc[VMIN]=0;
-  tios.c_cc[VTIME]=50;
-  
-  tcsetattr(ttyid,TCSANOW,&tios);
-  tcflush(ttyid,TCIOFLUSH);
-  
+  time_t t;
+  time(&t);
+  //char *str=(char*)malloc(60*sizeof(char));
+  struct tm *gt=localtime(&t);
+  struct timeval us;
+  gettimeofday(&us,NULL);
+  sprintf(str,"%s/%s-%d%02d%02d%02d%02d%02d%d.png",data_dir,hostname,gt->tm_year+1900,gt->tm_mon+1,gt->tm_mday,gt->tm_hour,gt->tm_min,gt->tm_sec,us.tv_usec%100);
+  //cout<<asctime(gmtime(&t))<<endl;
+  //return str;
+
 }
 
-void setMode(std::string ttypath,int mode=1)
+//Open Port & Set Port
+int SerialInit()
+{
+    struct termios stNew;
+    struct termios stOld;
+
+    nFd = open(DEVICE, O_RDWR|O_NOCTTY|O_NDELAY);
+    
+    if(-1 == nFd)
+    {
+        perror("Open Serial Port Error!\n");
+        return -1;
+    }
+
+    if( (fcntl(nFd, F_SETFL, 0)) < 0 )
+
+    {
+
+        perror("Fcntl F_SETFL Error!\n");
+        return -1;
+    }
+
+    if(tcgetattr(nFd, &stOld) != 0)
+    {
+        perror("tcgetattr error!\n");
+        return -1;
+    } 
+
+    stNew = stOld;
+    cfmakeraw(&stNew);
+
+    //set speed
+    cfsetispeed(&stNew, BAUDRATE);//115200
+    cfsetospeed(&stNew, BAUDRATE);
+
+    //set databits 
+    stNew.c_cflag |= (CLOCAL|CREAD);
+    stNew.c_cflag &= ~CSIZE;
+    stNew.c_cflag |= CS8;
+
+ 
+
+    //set parity
+    stNew.c_cflag &= ~PARENB;
+    stNew.c_iflag &= ~INPCK;
+
+ 
+
+    //set stopbits
+    stNew.c_cflag &= ~CSTOPB;
+    stNew.c_cc[VTIME]=0;    
+    stNew.c_cc[VMIN]=1; 
+                
+
+    tcflush(nFd,TCIFLUSH); 
+    if( tcsetattr(nFd,TCSANOW,&stNew) != 0 )
+    {
+        perror("tcsetattr Error!\n");
+        return -1;
+    }
+
+    return nFd;
+}
+
+bool setMode(int mode)
 {
   unsigned char buf1[9]={0xAA,0x05,0x00,0x15,0x01,0x00,0xC5,0xEB,0xAA}; 
   unsigned char buf2[9]={0xAA,0x05,0x00,0x15,0x01,0x01,0xC6,0xEB,0xAA};
   unsigned char buf3[9]={0xAA,0x05,0x00,0x16,0x01,0x00,0xC6,0xEB,0xAA};
   unsigned char buf4[9]={0xAA,0x05,0x00,0x16,0x01,0x02,0xC8,0xEB,0xAA};
+  unsigned char buf5[12]={0xAA,0x08,0x01,0xB4,0x01,0x00,0x00,0x00,0x00,0x68,0xEB,0xAA};
+  unsigned char buf6[12]={0xAA,0x08,0x01,0xB4,0x01,0x02,0x00,0x00,0x00,0x6A,0xEB,0xAA};
   unsigned char *buf;
   
   if(mode==1) //auto rectify off
@@ -83,37 +149,111 @@ void setMode(std::string ttypath,int mode=1)
     buf=buf3; 
   else if(mode==4) //background rectify
     buf=buf4; 
-  
-  int ttyid=open(ttypath.c_str(),O_RDWR|O_NOCTTY|O_NONBLOCK);
-  if(ttyid<0)
+  else if(mode==5) // shutter open
+    buf=buf5;
+  else if(mode==6) // shutter close
+    buf=buf6;
+  else
   {
-    //sduo usermod -aG dialout currentusername
-    std::cout<<"tty open failed\n"<<std::endl;
-    exit(-1);
+    cout<<"mode set error,exit"<<endl;
+    exit(0);
   }
-  ttyconfig(ttyid);
   
-  int sz=sizeof(buf1);
-  unsigned char res_buf[9];
-  while(write(ttyid,buf,sz)<0)
-    std::cout<<"<0"<<std::endl;;
-  //int res=write(ttyid,buf,sz) ;
-  //std::cout<<"   "<<res<<std::endl;
+  int nRet = 0;
+
+  if( SerialInit() == -1 )
+  {
+      perror("SerialInit Error!\n");
+      exit(0);
+  }
+  std::cout<<"tty open success,current mode is "<<mode<<std::endl;
+  
+  int sz;
+  if(mode>4)
+    sz=sizeof(buf5);
+  else
+    sz=sizeof(buf1);
+   
+  int count=0;
   while(1)
   {
-    if(read(ttyid,res_buf,sizeof(res_buf))>0)
-    {
-      //for(int i=0;i<sizeof(res_buf);i++)
-	//std::cout<<std::setbase(16)<<"0x"<<(int)res_buf[i]<<std::endl;
-      break;
-    }
+        nRet = write(nFd,buf,sz);
+        if(0 < nRet)
+        {
+           printf("tty write Data success!\n");
+           break;
+        }
+    	std::cout<<"tty write failed, retry..."<<std::endl;;
+    	count++;
+	usleep(33000);
+	if(count>15)
+	{
+	    std::cout<<"error: tty write failed! exit "<<std::endl;
+	    close(nFd);
+    	    return false;
+    	}	
+  }
+    
+    
+  unsigned char res_buf[SIZE];
+  bzero(res_buf, SIZE); 
+  count=0;
+  while(1)
+  {
+     nRet = read(nFd, res_buf, SIZE);	
+     if(0 < nRet)
+     {
+     	if( 6==mode || 1==mode )
+     	{
+            const unsigned char check9[9]={0x55,0x05,0x00,0x15,0x33,0x01,0xA3,0xEB,0xAA}; //auto rectify check
+            const unsigned char check8[8]={0x55,0x04,0xB4,0x33,0x01,0x41,0xEB,0xAA};//shutter close check  
+	
+            for(int i=0;i<8;i++)
+	    {
+	       //std::cout<<std::setbase(16)<<"0x"<<(int)res_buf[i]<<std::endl;
+	       if(1==mode)
+	       {
+	           if(check9[i]!=res_buf[i])
+	            {
+	               close(nFd);
+	               cout<<"auto rectify check error!"<<endl;
+	               return false;
+	            }
+	           
+	       }
+	       else if(6==mode)
+	       {
+	           if(check8[i]!=res_buf[i])
+	            {
+	               close(nFd);
+	               cout<<"auto rectify check error!"<<endl;
+	               return false;
+	            }
+	       }
+	       else
+	       {
+	           cout<<"fatal :mode error!"<<endl;
+	           exit(0);
+	       }
+	    }
+	     
+	}
+     	close(nFd);
+        return true;
+     }
+     count++;  
+     usleep(33000);
+     if(count>15)
+     {
+    	 std::cout<<"error: no received !,failed"<<std::endl;
+    	 close(nFd);
+    	 return false;
+     }
+
   }
   
-  close(ttyid);
-  
 }
-
-
+  
 void quit(const char * msg)
 {
   fprintf(stderr, "[%s] %d: %s\n", msg, errno, strerror(errno));
@@ -142,24 +282,14 @@ typedef struct {
   buffer_t* buffers;
   buffer_t head;
 } camera_t;
-char * getnamefromtime()
-{
-  time_t t;
-  time(&t);
-  char *str=(char*)malloc(30*sizeof(char));
-  struct tm *gt=localtime(&t);
-  struct timeval us;
-  gettimeofday(&us,NULL);
-  sprintf(str,"./data/%d-%d-%d-%d-%d-%d-%d.png",gt->tm_year+1900,gt->tm_mon+1,gt->tm_mday,gt->tm_hour,gt->tm_min,gt->tm_sec,us.tv_usec%100);
-  //cout<<asctime(gmtime(&t))<<endl;
-  return str;
 
-}
 
 camera_t* camera_open(const char * device, uint32_t width, uint32_t height)
 {
   int fd = open(device, O_RDWR | O_NONBLOCK, 0);
-  if (fd == -1) quit("open");
+  if (fd == -1) 
+      return NULL;
+      //quit("open");
   camera_t* camera = (camera_t*)malloc(sizeof (camera_t));
   camera->fd = fd;
   camera->width = width;
@@ -397,7 +527,7 @@ void yuyv2rgb(uint8_t* yuyv, uint32_t width, uint32_t height,char *name)
       
       
       /*int y0 = yuyv[index * 2 + 0] << 8;
-      int u = yuyv[index * 2 + 1] - 128;
+      int u = yuyv[index *string getName(string str) 2 + 1] - 128;
       int y1 = yuyv[index * 2 + 2] << 8;
       int v = yuyv[index * 2 + 3] - 128;
       rgb[index * 3 + 0] = minmax(0, (y0 + 359 * v) >> 8, 255);
@@ -408,65 +538,156 @@ void yuyv2rgb(uint8_t* yuyv, uint32_t width, uint32_t height,char *name)
       rgb[index * 3 + 5] = minmax(0, (y1 + 454 * u) >> 8, 255);*/
     }
   }
-  cv::imwrite (name,img);
-  //en_img = enhance_img(img);
-  //imwrite(name, en_img);
+  //cv::imwrite (name,img);
+  en_img = enhance_img(img);
+  imwrite(name, en_img);
   // cout<<img.depth()<<endl;
   //cv::imshow("img",en_img);
-  cv::waitKey(33);
+  //cv::waitKey(0);
   //cout<<(int)img.at<unsigned short>(height/2,width/2)<<endl;
   //return rgb;
 }
 
 
+/*string getName(string str)
+{
+  string name = "";
+  DIR *dir = opendir(str);
+  dirent *p = NULL;
+  while((p = readdir(dir)) != NULL)
+  {
+   if(p->d_name[0] != '.')
+   {
+     name = str + string(p->d_name);
+     cout << name << endl;
+   }
+  }
+  closedir(dir);
+  return name;
+}*/
+
 
 int main(int argc,char **argv){
 
+        /*DIR *theFolder = opendir("./new");
+        struct dirent *next_file;
+        char filepath[256];
+        while((next_file = readdir(theFolder)) != NULL)
+        {
+         sprintf(filepath, "%s/%s", "./new", next_file->d_name);
+         cout << "..."<< filepath<< endl;
+         remove(filepath);
+         cout <<"...remove the file "<<filepath<< "..."<<endl;
+        }
+        closedir(theFolder);*/
+while(1) //loop for debug
+{
 
-  std::string ttypath="/dev/ttyUSB0";
-  //setMode(ttypath,1));
-  camera_t* camera = camera_open("/dev/video0",640,512);
-  camera_init(camera);
-  camera_start(camera);
-
-  setMode(ttypath,1);
-  
-  
-  struct timeval timeout;
-  timeout.tv_sec = 1;
-  timeout.tv_usec = 0;
-  /* skip 5 frames for booting a cam */
-  for (int i = 0; i < 5; i++) {
-    camera_frame(camera, timeout);
-  }
-  
-
-  while(1)
-  {
-    setMode(ttypath,3);
-    usleep(10);
-    setMode(ttypath,4);
-    usleep(10);
-    for(int i=0;i<5;i++)
-    {
-	  camera_frame(camera, timeout);
-	  yuyv2rgb(camera->head.start, camera->width, camera->height,getnamefromtime());
-	  //sleep(1);
-	  //FILE* out = fopen("result.jpg", "w");
-	  //jpeg(out, rgb, camera->width, camera->height, 100);
-	  //fclose(out);
-	  //free(rgb);
-	  cv::waitKey(33);
-    }
-    std::cout<<"capture 5 pic in data/"<<std::endl;
-    sleep(300);
-    
-  }
-
-  camera_stop(camera);
-  camera_finish(camera);
-  camera_close(camera);
-  return 0;
+	
+	
+	cout<<"\n\nshutter open ..."<<endl;
+	setMode(5);
+	cout<<"shutter open done\n\n"<<endl;
+	usleep(500000);
+	
+	cout<<"\n\nclose auto rectify ..."<<endl;
+	for(int i=0;;i++)
+ 	{
+ 	    if(setMode(1))
+ 	    	break;
+ 	    usleep(33000);
+ 	    if(i>15)
+ 	    {
+ 	      cout<<"fatal error:can't turn off auto rectify! "<<endl;
+ 	      //exit(0);
+ 	      break;
+ 	    }
+ 	}
+	
+	cout<<"close auto rectify done \n\n"<<endl;
+	
+	
+	
+	cout<<"\n\nbackground rectify ..."<<endl;
+	setMode(4);
+	cout<<"background rectify done\n\n"<<endl;
+	sleep(3);
+	
+	cout<<"\n\nshutter rectify ..."<<endl;
+	setMode(3);
+	cout<<"shutter rectify done\n\n"<<endl;
+	//sleep(10000);
+	
+	camera_t* camera = camera_open("/dev/video",640,512);
+	
+	if(camera==NULL)
+	{
+	    setMode(6);
+	    exit(0);
+	}
+	
+	cout<<"\ncamera init..."<<endl;
+	camera_init(camera);
+	camera_start(camera);
+	
+	struct timeval timeout;
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+	/* skip 5 frames for booting a cam */
+	for (int i = 0; i < 5; i++) 
+	    camera_frame(camera, timeout);
+	
+	
+	for(int i=0;i<3;i++)
+	    camera_frame(camera, timeout);
+	camera_frame(camera, timeout);
+	
+	char *str=(char*)malloc(60*sizeof(char));
+	getnamefromtime(str);
+	yuyv2rgb(camera->head.start, camera->width, camera->height,str);
+	free(str);
+	
+	//sleep(1);
+	//FILE* out = fopen("result.jpg", "w");
+	//jpeg(out, rgb, camera->width, camera->height, 100);
+	//fclose(out);
+	//free(rgb);
+	//cv::waitKey(33);
+	std::cout<<"\n\ncapture  pic in "<<data_dir<<std::endl;
+	
+	
+ 	
+ 	
+ 	//sleep(1);
+ 	cout<<"\n\nshutter close ..."<<endl;
+ 	for(int i=0;;i++)
+ 	{
+ 	    if(setMode(6))
+ 	    	break;
+ 	    usleep(33000);
+ 	    if(i>30)
+ 	    {
+ 	      cout<<"fatal error:can't close shutter! ,exit"<<endl;
+ 	      exit(0);
+ 	    }
+ 	}
+	
+	cout<<"shutter close done"<<endl;
+	
+	
+	usleep(33000);
+	camera_stop(camera);
+	usleep(33000);
+  	camera_finish(camera);
+  	usleep(33000);
+ 	camera_close(camera);
+	
+        cout <<"IR camera closed\n\n"<<endl; 
+        
+        usleep(4000000);
+ }      
+   
+  	return 0;
  
  
   }

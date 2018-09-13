@@ -1,4 +1,4 @@
-# Install script for directory: /home/oatrc/kde_ws/dsgf/src
+# Install script for directory: /home/pi/Desktop/IRcamera/src
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
