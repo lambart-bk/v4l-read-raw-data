@@ -1,6 +1,6 @@
 # v4l-read-raw-data
 
-# branch master
+## branch master
 
 read camera raw data using v4l
 
