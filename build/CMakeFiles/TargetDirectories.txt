@@ -1,0 +1,5 @@
+/home/pi/work/IRcamera/build/CMakeFiles/edit_cache.dir
+/home/pi/work/IRcamera/build/CMakeFiles/rebuild_cache.dir
+/home/pi/work/IRcamera/build/src/CMakeFiles/rebuild_cache.dir
+/home/pi/work/IRcamera/build/src/CMakeFiles/edit_cache.dir
+/home/pi/work/IRcamera/build/src/CMakeFiles/IRcamera.dir
