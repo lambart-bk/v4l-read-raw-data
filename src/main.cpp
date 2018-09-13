@@ -112,32 +112,6 @@ void uartRec(const void *msg, unsigned int msglen, void *user_data)
     
        
 }
-void ttyconfig(int ttyid)
-{
-  struct termios tios;
-  tios.c_oflag=0;
-  tios.c_iflag=0;
-  tios.c_lflag=0;
-  cfsetispeed(&tios,B115200);
-  cfsetospeed(&tios,B115200);
-  
-  //data bits
-  tios.c_cflag&=~0x30;
-  tios.c_cflag|=CS8;
-  
-  //stop bits
-  tios.c_cflag&=~CSTOPB;
-  
-  //parity
-  tios.c_cflag&=~PARENB;
-  
-  tios.c_cc[VMIN]=0;
-  tios.c_cc[VTIME]=50;
-  
-  tcsetattr(ttyid,TCSANOW,&tios);
-  tcflush(ttyid,TCIOFLUSH);
-  
-}
 
 bool setMode(std::string ttypath,int mode)
 {
