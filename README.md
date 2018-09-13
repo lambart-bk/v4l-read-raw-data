@@ -1,6 +1,6 @@
 # v4l-read-raw-data
 
-#branch thread-version
+## branch thread-version
 
 alloc separate thread for receive serial data
 
