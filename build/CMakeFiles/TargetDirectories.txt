@@ -1,5 +1,0 @@
-/home/oatrc/kde_ws/dsgf/build/CMakeFiles/edit_cache.dir
-/home/oatrc/kde_ws/dsgf/build/CMakeFiles/rebuild_cache.dir
-/home/oatrc/kde_ws/dsgf/build/src/CMakeFiles/edit_cache.dir
-/home/oatrc/kde_ws/dsgf/build/src/CMakeFiles/rebuild_cache.dir
-/home/oatrc/kde_ws/dsgf/build/src/CMakeFiles/v4l-read-raw.dir
